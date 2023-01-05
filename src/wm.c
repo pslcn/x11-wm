@@ -10,44 +10,99 @@
 
 typedef struct {
 	KeySym keysym;
-	void (*func)(const void *);
+	void (*func)(const void **);
 	const void *arg;
 } Keybinding;
 
 /* Function Declarations */
-static void cmdexec(const void *arg);
+static void cmdexec(const void **arg);
+static void configurerequest(XEvent *e); 
 static void keypress(XEvent *e);
+static void maprequest(XEvent *e); 
+static void mappingnotify(XEvent *e);
 
 /* Configuration */
+static const char *termcmd[] = { "st", NULL };
 static Keybinding keys[] = {
-	{ XK_Return, cmdexec, { "xterm", "-display", ":1", "NULL" } }, /* test spawn xterm */
+	{ XK_Return, cmdexec, termcmd },
 };
 
 static Display *d;
 static Window root;
 
-static void (*handle_event[LASTEvent]) (XEvent *) = {
-	[KeyPress] = keypress,
-};
+void
+grabkeys()
+{
+	for(int i = 0; i < LENGTH(keys); i++) {
+		XGrabKey(d, XKeysymToKeycode(d, keys[i].keysym), Mod1Mask, root, True, GrabModeAsync, GrabModeAsync);
+	}
+}
 
 void 
-cmdexec(const void *arg)
+mappingnotify(XEvent *e)
 {
-	execvp(((char **)arg)[0], (char **)arg);
-	printf("execvp '%s' failed\n", ((char **)arg)[0]);
+	XMappingEvent *ev = &e->xmapping;
+	XRefreshKeyboardMapping(ev);
+	if(ev->request == MappingKeyboard) grabkeys();
+}
+
+void
+maprequest(XEvent *e)
+{
+	static XWindowAttributes wa;
+	XMapRequestEvent *ev = &e->xmaprequest;
+	Window w = ev->window;
+	XGetWindowAttributes(d, w, &wa); 
+	XWindowChanges wc;
+	wc.x = 20;
+	wc.y = 20;
+	XConfigureWindow(d, w, CWX|CWY, &wc);
+	XSelectInput(d, w, EnterWindowMask|FocusChangeMask|PropertyChangeMask|StructureNotifyMask);
+	XMapWindow(d, w);
+}
+
+void 
+cmdexec(const void **arg)
+{
+	if(fork() == 0) {
+		setsid();
+		execvp(((char **)arg)[0], (char **)arg);
+		printf("execvp '%s' failed\n", ((char **)arg)[0]);
+	}
 }
 
 void 
 keypress(XEvent *e)
 {
-	keys[0].func(&(keys[0].arg));
-	/*
-	KeySym keysym = XKeycodeToKeysym(d, (KeyCode)(&(&e->xkey)->keycode), 0);
-	for(int i = 0; i < LENGTH(keys); i++) {
-		if(keysym == keys[i].keysym) keys[i].func(&(keys[i].arg)); // change i to keycode for faster indexing
+	XKeyEvent *ev = &e->xkey;
+	KeySym keysym = XKeycodeToKeysym(d, (KeyCode)ev->keycode, 0);
+	for(unsigned int i = 0; i < LENGTH(keys); i++) {
+		if(keysym == keys[i].keysym) keys[i].func(&(keys[i].arg)); // change i to keycode for faster indexing 
 	}
-	*/
 }
+
+void 
+configurerequest(XEvent *e)
+{
+	XConfigureRequestEvent *ev = &e->xconfigurerequest;
+	XWindowChanges wc;
+	wc.x = ev->x;
+	wc.y = ev->y;
+	wc.width = ev->width;
+	wc.height = ev->height;
+	wc.border_width = ev->border_width;
+	wc.sibling = ev->above;
+	wc.stack_mode = ev->detail;
+	XConfigureWindow(d, ev->window, ev->value_mask, &wc);
+	XSync(d, False);
+}
+
+static void (*handle_event[LASTEvent]) (XEvent *) = {
+	[ConfigureRequest] = configurerequest,
+	[KeyPress] = keypress,
+	[MapRequest] = maprequest,
+	[MappingNotify] = mappingnotify,
+};
 
 void 
 handle_events(void)
@@ -68,9 +123,7 @@ setup_root(void)
 	root = RootWindow(d, DefaultScreen(d));
 	a.event_mask = StructureNotifyMask|SubstructureNotifyMask|EnterWindowMask|LeaveWindowMask|PropertyChangeMask|SubstructureRedirectMask;
 	XSelectInput(d, root, a.event_mask);
-	for(int i = 0; i < LENGTH(keys); i++) {
-		XGrabKey(d, XKeysymToKeycode(d, keys[i].keysym), Mod1Mask, root, True, GrabModeAsync, GrabModeAsync);
-	}
+	grabkeys();
 }
 
 int 
