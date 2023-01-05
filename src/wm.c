@@ -6,51 +6,79 @@
 #include <X11/Xutil.h>
 #include <X11/Xos.h>
 
+#define LENGTH(X) (sizeof X / sizeof X[0])
+
+typedef struct {
+	KeySym keysym;
+	void (*func)(const void *);
+	const void *arg;
+} Keybinding;
+
+/* Function Declarations */
+static void cmdexec(const void *arg);
+static void keypress(XEvent *e);
+
+/* Configuration */
+static Keybinding keys[] = {
+	{ XK_Return, cmdexec, { "xterm", "-display", ":1", "NULL" } }, /* test spawn xterm */
+};
+
+static Display *d;
+static Window root;
+
+static void (*handle_event[LASTEvent]) (XEvent *) = {
+	[KeyPress] = keypress,
+};
+
+void 
+cmdexec(const void *arg)
+{
+	execvp(((char **)arg)[0], (char **)arg);
+	printf("execvp '%s' failed\n", ((char **)arg)[0]);
+}
+
+void 
+keypress(XEvent *e)
+{
+	keys[0].func(&(keys[0].arg));
+	/*
+	KeySym keysym = XKeycodeToKeysym(d, (KeyCode)(&(&e->xkey)->keycode), 0);
+	for(int i = 0; i < LENGTH(keys); i++) {
+		if(keysym == keys[i].keysym) keys[i].func(&(keys[i].arg)); // change i to keycode for faster indexing
+	}
+	*/
+}
+
+void 
+handle_events(void)
+{
+	XEvent e;
+	while(1) {
+		XNextEvent(d, &e);
+		XSync(d, False);
+		if(handle_event[e.type]) handle_event[e.type](&e);
+	}
+}
+
+int
+setup_root(void)
+{
+	XSetWindowAttributes a;
+	if(!(d = XOpenDisplay(NULL))) return EXIT_FAILURE;
+	root = RootWindow(d, DefaultScreen(d));
+	a.event_mask = StructureNotifyMask|SubstructureNotifyMask|EnterWindowMask|LeaveWindowMask|PropertyChangeMask|SubstructureRedirectMask;
+	XSelectInput(d, root, a.event_mask);
+	for(int i = 0; i < LENGTH(keys); i++) {
+		XGrabKey(d, XKeysymToKeycode(d, keys[i].keysym), Mod1Mask, root, True, GrabModeAsync, GrabModeAsync);
+	}
+}
+
 int 
 main(void)
 {
-	Display *d;
-	int screen;
-	Window root;
-	XWindowAttributes attrs;
-	XEvent e;
-
-	if(!(d = XOpenDisplay(NULL))) return EXIT_FAILURE;
-	screen = DefaultScreen(d);
-	root = RootWindow(d, screen);
-
-	XGrabButton(d, 1, Mod1Mask, root, True, ButtonPressMask, GrabModeAsync, GrabModeAsync, None, None);
-
-	int right = 1;
-	int up = 1;
-	int x = 0;
-	int y = 0;
-	for(;;) {
-		XNextEvent(d, &e);
-		if(e.type == ButtonPress && e.xbutton.subwindow != None) {
-			XGetWindowAttributes(d, e.xbutton.subwindow, &attrs);
-			x = 40;
-			y = 40;
-			for(;;) {
-				XMoveWindow(d, e.xbutton.subwindow, x, y);
-				XSync(d, 0);
-				if(x > 1280 - attrs.width) {
-					right = 0;
-				} else if(x < 0) {
-					right = 1;
-				}
-				if(y < 0) {
-					up = 1;
-				} else if(y > 800 - attrs.height) {
-					up = 0;
-				}
-				x += (right == 1) ? 8 : -6;
-				y += (up == 1) ? 6 : -4;
-				usleep(50 * 1000);
-			}
-		}
-	}
-	
-	// return EXIT_SUCCESS;
+	setup_root();
+	handle_events();
+	XCloseDisplay(d);
+	return EXIT_SUCCESS;
 }
 
