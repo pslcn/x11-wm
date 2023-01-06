@@ -22,9 +22,8 @@ static void maprequest(XEvent *e);
 static void mappingnotify(XEvent *e);
 
 /* Configuration */
-static const char *termcmd[] = { "st", NULL };
 static Keybinding keys[] = {
-	{ XK_Return, cmdexec, termcmd },
+	{ XK_Return, cmdexec, { "st", "NULL" } },
 };
 
 static Display *d;
@@ -77,7 +76,7 @@ keypress(XEvent *e)
 	XKeyEvent *ev = &e->xkey;
 	KeySym keysym = XKeycodeToKeysym(d, (KeyCode)ev->keycode, 0);
 	for(unsigned int i = 0; i < LENGTH(keys); i++) {
-		if(keysym == keys[i].keysym) keys[i].func(&(keys[i].arg)); // change i to keycode for faster indexing 
+		if(keysym == keys[i].keysym && keys[i].func) keys[i].func(&(keys[i].arg)); 
 	}
 }
 
