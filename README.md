@@ -1,6 +1,6 @@
 # x11-wm
 
-### Testing (Using Xephyr)
+## Testing (Using Xephyr)
 
 ``` bash	
 make

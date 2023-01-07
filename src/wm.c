@@ -14,35 +14,62 @@ typedef struct {
 	const void *arg;
 } Keybinding;
 
+typedef struct {
+	Window **wins;
+	Window *sel;
+	int size;
+	int count;
+} Tag;
+
 /* Function Declarations */
 static void cmdexec(const void **arg);
 static void configurerequest(XEvent *e); 
 static void keypress(XEvent *e);
 static void maprequest(XEvent *e); 
-static void mappingnotify(XEvent *e);
+
+/* Variable Declarations */
+static void (*handle_event[LASTEvent]) (XEvent *) = {
+	[ConfigureRequest] = configurerequest,
+	[KeyPress] = keypress,
+	[MapRequest] = maprequest,
+};
+static Display *d;
+static Window root;
+static Tag *seltag;
 
 /* Configuration */
 static Keybinding keys[] = {
-	{ XK_Return, cmdexec, { "st", "NULL" } },
+	{ XK_Return, cmdexec,		 { "st", "NULL" } },
+	{ XK_C,			 killclient, { NULL } }, 
 };
 
-static Display *d;
-static Window root;
-
-void
-grabkeys()
+/* Function Implementations */
+Tag 
+*create_tag(void)
 {
-	for(int i = 0; i < LENGTH(keys); i++) {
-		XGrabKey(d, XKeysymToKeycode(d, keys[i].keysym), Mod1Mask, root, True, GrabModeAsync, GrabModeAsync);
-	}
+	Tag *tag = (Tag *)malloc(sizeof(Tag));
+	tag->size = 4; /* max num wins per tag */
+	tag->count = 0;
+	tag->wins = (Window **)calloc(tag->size, sizeof(Window*));
+	for(int i = 0; i < tag->size; i++) tag->wins[i] = NULL;
+	return tag;
 }
 
 void 
-mappingnotify(XEvent *e)
+free_tag(Tag *tag)
 {
-	XMappingEvent *ev = &e->xmapping;
-	XRefreshKeyboardMapping(ev);
-	if(ev->request == MappingKeyboard) grabkeys();
+	free(tag->wins);
+	free(tag);
+}
+
+bool
+stackadd(Window *w)
+{
+	if(seltag->count == seltag->size) return 0;
+	seltag->count++;
+	seltag->wins[seltag->count] = w;
+	seltag->sel = w;
+	return 1;
 }
 
 void
@@ -50,14 +77,12 @@ maprequest(XEvent *e)
 {
 	static XWindowAttributes wa;
 	XMapRequestEvent *ev = &e->xmaprequest;
-	Window w = ev->window;
-	XGetWindowAttributes(d, w, &wa); 
-	XWindowChanges wc;
-	wc.x = 20;
-	wc.y = 20;
-	XConfigureWindow(d, w, CWX|CWY, &wc);
-	XSelectInput(d, w, EnterWindowMask|FocusChangeMask|PropertyChangeMask|StructureNotifyMask);
-	XMapWindow(d, w);
+	seltag->sel = ev->window;
+	XGetWindowAttributes(d, seltag->sel, &wa); 
+	XWindowChanges wc = {.x = 20, .y = 20,};
+	XConfigureWindow(d, seltag->sel, CWX|CWY, &wc);
+	XSelectInput(d, seltag->sel, EnterWindowMask|FocusChangeMask|PropertyChangeMask|StructureNotifyMask);
+	XMapWindow(d, seltag->sel);
 }
 
 void 
@@ -68,6 +93,16 @@ cmdexec(const void **arg)
 		execvp(((char **)arg)[0], (char **)arg);
 		printf("execvp '%s' failed\n", ((char **)arg)[0]);
 	}
+}
+
+void
+killclient(const void **arg)
+{
+	XGrabServer(d);
+	XSetCloseDownMode(d, DestroyAll);
+	XKillClient(d, seltag->sel);
+	XSync(d, False);
+	XUngrabServer(d);
 }
 
 void 
@@ -84,24 +119,10 @@ void
 configurerequest(XEvent *e)
 {
 	XConfigureRequestEvent *ev = &e->xconfigurerequest;
-	XWindowChanges wc;
-	wc.x = ev->x;
-	wc.y = ev->y;
-	wc.width = ev->width;
-	wc.height = ev->height;
-	wc.border_width = ev->border_width;
-	wc.sibling = ev->above;
-	wc.stack_mode = ev->detail;
+	XWindowChanges wc = {.x = ev->x, .y = ev->y, .width = ev->width, .height = ev->height, .border_width = ev->border_width, .sibling = ev->above, .stack_mode = ev->detail, };
 	XConfigureWindow(d, ev->window, ev->value_mask, &wc);
 	XSync(d, False);
 }
-
-static void (*handle_event[LASTEvent]) (XEvent *) = {
-	[ConfigureRequest] = configurerequest,
-	[KeyPress] = keypress,
-	[MapRequest] = maprequest,
-	[MappingNotify] = mappingnotify,
-};
 
 void 
 handle_events(void)
@@ -122,7 +143,10 @@ setup_root(void)
 	root = RootWindow(d, DefaultScreen(d));
 	a.event_mask = StructureNotifyMask|SubstructureNotifyMask|EnterWindowMask|LeaveWindowMask|PropertyChangeMask|SubstructureRedirectMask;
 	XSelectInput(d, root, a.event_mask);
-	grabkeys();
+	for(int i = 0; i < LENGTH(keys); i++) {
+		XGrabKey(d, XKeysymToKeycode(d, keys[i].keysym), Mod1Mask, root, True, GrabModeAsync, GrabModeAsync);
+	}
+	seltag = create_tag();
 }
 
 int 
@@ -130,6 +154,7 @@ main(void)
 {
 	setup_root();
 	handle_events();
+	free_tag(seltag);
 	XCloseDisplay(d);
 	return EXIT_SUCCESS;
 }
