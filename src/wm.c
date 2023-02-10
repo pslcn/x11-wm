@@ -14,13 +14,6 @@ typedef struct {
 	const void *arg;
 } Keybinding;
 
-typedef struct {
-	Window **wins;
-	Window *sel;
-	int size;
-	int count;
-} Tag;
-
 /* Function Declarations */
 static void cmdexec(const void **arg);
 static void configurerequest(XEvent *e); 
@@ -35,7 +28,6 @@ static void (*handle_event[LASTEvent]) (XEvent *) = {
 };
 static Display *d;
 static Window root;
-static Tag *seltag;
 
 /* Configuration */
 static Keybinding keys[] = {
@@ -44,34 +36,6 @@ static Keybinding keys[] = {
 };
 
 /* Function Implementations */
-Tag 
-*create_tag(void)
-{
-	Tag *tag = (Tag *)malloc(sizeof(Tag));
-	tag->size = 4; /* max num wins per tag */
-	tag->count = 0;
-	tag->wins = (Window **)calloc(tag->size, sizeof(Window*));
-	for(int i = 0; i < tag->size; i++) tag->wins[i] = NULL;
-	return tag;
-}
-
-void 
-free_tag(Tag *tag)
-{
-	free(tag->wins);
-	free(tag);
-}
-
-bool
-stackadd(Window *w)
-{
-	if(seltag->count == seltag->size) return 0;
-	seltag->count++;
-	seltag->wins[seltag->count] = w;
-	seltag->sel = w;
-	return 1;
-}
-
 void
 maprequest(XEvent *e)
 {
