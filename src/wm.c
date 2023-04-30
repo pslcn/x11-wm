@@ -20,6 +20,8 @@ static void configurerequest(XEvent *e);
 static void keypress(XEvent *e);
 static void maprequest(XEvent *e); 
 
+static void killclient(const void **arg);
+
 /* Variable Declarations */
 static void (*handle_event[LASTEvent]) (XEvent *) = {
 	[ConfigureRequest] = configurerequest,
@@ -41,12 +43,12 @@ maprequest(XEvent *e)
 {
 	static XWindowAttributes wa;
 	XMapRequestEvent *ev = &e->xmaprequest;
-	seltag->sel = ev->window;
-	XGetWindowAttributes(d, seltag->sel, &wa); 
+	// seltag->sel = ev->window; 
+	// XGetWindowAttributes(d, seltag->sel, &wa); 
 	XWindowChanges wc = {.x = 20, .y = 20,};
-	XConfigureWindow(d, seltag->sel, CWX|CWY, &wc);
-	XSelectInput(d, seltag->sel, EnterWindowMask|FocusChangeMask|PropertyChangeMask|StructureNotifyMask);
-	XMapWindow(d, seltag->sel);
+	// XConfigureWindow(d, seltag->sel, CWX|CWY, &wc);
+	// XSelectInput(d, seltag->sel, EnterWindowMask|FocusChangeMask|PropertyChangeMask|StructureNotifyMask);
+	// XMapWindow(d, seltag->sel);
 }
 
 void 
@@ -64,7 +66,7 @@ killclient(const void **arg)
 {
 	XGrabServer(d);
 	XSetCloseDownMode(d, DestroyAll);
-	XKillClient(d, seltag->sel);
+	// XKillClient(d, seltag->sel);
 	XSync(d, False);
 	XUngrabServer(d);
 }
@@ -110,7 +112,7 @@ setup_root(void)
 	for(int i = 0; i < LENGTH(keys); i++) {
 		XGrabKey(d, XKeysymToKeycode(d, keys[i].keysym), Mod1Mask, root, True, GrabModeAsync, GrabModeAsync);
 	}
-	seltag = create_tag();
+	// seltag = create_tag();
 }
 
 int 
@@ -118,7 +120,7 @@ main(void)
 {
 	setup_root();
 	handle_events();
-	free_tag(seltag);
+	// free_tag(seltag);
 	XCloseDisplay(d);
 	return EXIT_SUCCESS;
 }
