@@ -2,9 +2,9 @@
 
 ## Testing (Using Xephyr)
 
+After running the `test/xephyr_start.sh` shell script:
+
 ``` bash	
-make
-Xephyr -ac -screen 1280x1024 -br -reset -terminate 2> /dev/null :1 &
-DISPLAY=:1 xterm &
+DISPLAY=:1 $TERMINAL & # Optionally spawn a terminal
 env DISPLAY=:1 ./wm
 ```
